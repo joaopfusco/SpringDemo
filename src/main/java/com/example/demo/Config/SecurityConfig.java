@@ -20,6 +20,9 @@ public class SecurityConfig {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -27,19 +30,30 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        boolean isProd = "prod".equals(activeProfile);
+
         http
             .securityMatcher("/api/**")
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/user/login").permitAll()
-                .anyRequest().authenticated()
-            )
             .csrf(AbstractHttpConfigurer::disable)
-            .securityContext(context -> context.requireExplicitSave(false))
-            .addFilter(new JwtAuthenticationFilter(http.getSharedObject(AuthenticationManager.class)))
-            .addFilterBefore(new JwtAuthorizationFilter(jwtSecret), UsernamePasswordAuthenticationFilter.class);
+            .securityContext(context -> context.requireExplicitSave(false));
+
+        if (isProd) {
+            http
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/user/login").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .addFilter(new JwtAuthenticationFilter(http.getSharedObject(AuthenticationManager.class)))
+                .addFilterBefore(new JwtAuthorizationFilter(jwtSecret), UsernamePasswordAuthenticationFilter.class);
+        }
+        else {
+            http
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+        }
 
         return http.build();
     }
+
     @Bean
     public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
         return http.getSharedObject(AuthenticationManagerBuilder.class)
